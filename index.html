@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Train Escape: Express Carriage</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #111;
+      color: #fff;
+      font-family: 'Courier New', Courier, monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    h1 {
+      margin: 5px 0;
+      font-size: 20px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    #game-container {
+      position: relative;
+      border: 4px solid #fff;
+      background-color: #222;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.2);
+    }
+
+    canvas {
+      display: block;
+      background-color: #f0f0f0;
+    }
+
+    #ui-panel {
+      margin-top: 10px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    button {
+      background-color: #333;
+      color: #fff;
+      border: 2px solid #fff;
+      padding: 8px 16px;
+      font-family: inherit;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background-color: #555;
+    }
+
+    /* On-screen Controls */
+    #controls-container {
+      margin-top: 15px;
+      display: grid;
+      grid-template-columns: repeat(3, 60px);
+      grid-template-rows: repeat(2, 50px);
+      gap: 5px;
+      justify-content: center;
+    }
+
+    .btn-ctrl {
+      background-color: #222;
+      color: #fff;
+      border: 2px solid #888;
+      font-size: 18px;
+      font-weight: bold;
+      border-radius: 6px;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    .btn-ctrl:active {
+      background-color: #666;
+    }
+
+    #btn-up { grid-column: 2; grid-row: 1; }
+    #btn-left { grid-column: 1; grid-row: 2; }
+    #btn-down { grid-column: 2; grid-row: 2; }
+    #btn-right { grid-column: 3; grid-row: 2; }
+  </style>
+</head>
+<body>
+
+  <h1>Train Escape</h1>
+
+  <div id="game-container">
+    <canvas id="gameCanvas" width="800" height="300"></canvas>
+  </div>
+
+  <div id="ui-panel">
+    <button id="switchCharBtn">Character: Businessman & Daughter</button>
+    <button id="restartBtn">Restart Game</button>
+  </div>
+
+  <div id="controls-container">
+    <button class="btn-ctrl" id="btn-up">▲</button>
+    <button class="btn-ctrl" id="btn-left">◄</button>
+    <button class="btn-ctrl" id="btn-down">▼</button>
+    <button class="btn-ctrl" id="btn-right">►</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let gameActive = true;
+    let score = 0;
+    let frameCount = 0;
+    let selectedCharacter = 0;
+
+    const player = {
+      x: 80,
+      y: 180,
+      width: 40,
+      height: 50,
+      speed: 5
+    };
+
+    const keys = {
+      Up: false,
+      Down: false,
+      Left: false,
+      Right: false
+    };
+
+    let zombies = [];
+
+    const characters = [
+      { name: "Businessman & Daughter", color1: "#2c3e50", color2: "#e74c3c", label1: "👔", label2: "👧" },
+      { name: "Gym Lover & Wife", color1: "#27ae60", color2: "#8e44ad", label1: "🏋️", label2: "👩" }
+    ];
+
+    document.getElementById('switchCharBtn').addEventListener('click', () => {
+      selectedCharacter = (selectedCharacter + 1) % characters.length;
+      document.getElementById('switchCharBtn').innerText = "Character: " + characters[selectedCharacter].name;
+    });
+
+    document.getElementById('restartBtn').addEventListener('click', resetGame);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'w') keys.Up = true;
+      if (e.key === 'ArrowDown' || e.key === 's') keys.Down = true;
+      if (e.key === 'ArrowLeft' || e.key === 'a') keys.Left = true;
+      if (e.key === 'ArrowRight' || e.key === 'd') keys.Right = true;
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'ArrowUp' || e.key === 'w') keys.Up = false;
+      if (e.key === 'ArrowDown' || e.key === 's') keys.Down = false;
+      if (e.key === 'ArrowLeft' || e.key === 'a') keys.Left = false;
+      if (e.key === 'ArrowRight' || e.key === 'd') keys.Right = false;
+    });
+
+    function bindTouchControl(id, keyProp) {
+      const btn = document.getElementById(id);
+      const start = (e) => { e.preventDefault(); keys[keyProp] = true; };
+      const end = (e) => { e.preventDefault(); keys[keyProp] = false; };
+      btn.addEventListener('mousedown', start);
+      btn.addEventListener('mouseup', end);
+      btn.addEventListener('touchstart', start);
+      btn.addEventListener('touchend', end);
+    }
+
+    bindTouchControl('btn-up', 'Up');
+    bindTouchControl('btn-down', 'Down');
+    bindTouchControl('btn-left', 'Left');
+    bindTouchControl('btn-right', 'Right');
+
+    function spawnZombie() {
+      const minY = 100;
+      const maxY = canvas.height - 60;
+      const randomY = Math.floor(Math.random() * (maxY - minY + 1)) + minY;
+      const randomSpeed = Math.random() * 3 + 4 + (score / 500);
+
+      zombies.push({
+        x: canvas.width,
+        y: randomY,
+        width: 30,
+        height: 45,
+        speed: randomSpeed
+      });
+    }
+
+    function resetGame() {
+      player.x = 80;
+      player.y = 180;
+      zombies = [];
+      score = 0;
+      frameCount = 0;
+      gameActive = true;
+      loop();
+    }
+
+    // DRAW TRAIN CARRIAGE BACKGROUND
+    function drawTrainBackground() {
+      // 1. Train Interior Walls & Floor
+      ctx.fillStyle = "#e0e0e0"; // Wall
+      ctx.fillRect(0, 0, canvas.width, 90);
+
+      ctx.fillStyle = "#a8a8a8"; // Aisle/Carpet
+      ctx.fillRect(0, 90, canvas.width, canvas.height - 90);
+
+      // 2. Overhead Luggage Rack
+      ctx.fillStyle = "#555";
+      ctx.fillRect(0, 25, canvas.width, 6);
+      ctx.fillStyle = "#888";
+      ctx.fillRect(0, 20, canvas.width, 5);
+
+      // 3. Train Windows & Outside Scenery Effect
+      let windowOffset = (frameCount * 12) % 120;
+      for (let x = -windowOffset; x < canvas.width + 100; x += 120) {
+        // Window Frame
+        ctx.fillStyle = "#333";
+        ctx.fillRect(x, 35, 70, 45);
+        // Glass / Outside Motion (Dino Style Gray Scenery)
+        ctx.fillStyle = "#95a5a6";
+        ctx.fillRect(x + 4, 39, 62, 37);
+        // Window Reflection
+        ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+        ctx.beginPath();
+        ctx.moveTo(x + 10, 39);
+        ctx.lineTo(x + 30, 39);
+        ctx.lineTo(x + 15, 76);
+        ctx.lineTo(x + 5, 76);
+        ctx.fill();
+      }
+
+      // 4. Train Seats along the Top & Bottom Aisle Boundaries
+      let seatOffset = (frameCount * 10) % 80;
+      
+      // Top Row Seats
+      for (let x = -seatOffset; x < canvas.width + 80; x += 80) {
+        ctx.fillStyle = "#2980b9"; // Seat Cushion
+        ctx.fillRect(x, 82, 35, 12);
+        ctx.fillStyle = "#1a5276";
+        ctx.fillRect(x, 78, 35, 4);
+      }
+
+      // Bottom Row Seats
+      for (let x = -seatOffset; x < canvas.width + 80; x += 80) {
+        ctx.fillStyle = "#2980b9";
+        ctx.fillRect(x, canvas.height - 18, 35, 12);
+        ctx.fillStyle = "#1a5276";
+        ctx.fillRect(x, canvas.height - 22, 35, 4);
+      }
+
+      // 5. Floor Motion Grid Lines
+      ctx.strokeStyle = "#bcbcbc";
+      ctx.lineWidth = 2;
+      let floorOffset = (frameCount * 10) % 40;
+      for (let x = -floorOffset; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 95);
+        ctx.lineTo(x, canvas.height - 20);
+        ctx.stroke();
+      }
+    }
+
+    function loop() {
+      if (!gameActive) return;
+
+      frameCount++;
+      score++;
+
+      // Boundaries tailored to stay inside the train aisle
+      if (keys.Up && player.y > 95) player.y -= player.speed;
+      if (keys.Down && player.y < canvas.height - player.height - 22) player.y += player.speed;
+      if (keys.Left && player.x > 10) player.x -= player.speed;
+      if (keys.Right && player.x < canvas.width - player.width - 10) player.x += player.speed;
+
+      // Clear & Draw Train Carriage
+      drawTrainBackground();
+
+      // Draw Player Characters
+      const charData = characters[selectedCharacter];
+      
+      // Main Character
+      ctx.fillStyle = charData.color1;
+      ctx.fillRect(player.x, player.y, player.width - 10, player.height);
+      ctx.font = "16px sans-serif";
+      ctx.fillText(charData.label1, player.x + 2, player.y + 25);
+
+      // Companion Character
+      ctx.fillStyle = charData.color2;
+      ctx.fillRect(player.x - 15, player.y + 15, 12, player.height - 15);
+      ctx.fillText(charData.label2, player.x - 18, player.y + 35);
+
+      // Spawn Zombies
+      if (frameCount % Math.max(20, 60 - Math.floor(score / 200)) === 0) {
+        spawnZombie();
+      }
+
+      // Update & Draw Zombies
+      for (let i = zombies.length - 1; i >= 0; i--) {
+        let z = zombies[i];
+        z.x -= z.speed;
+
+        ctx.fillStyle = "#444";
+        ctx.fillRect(z.x, z.y, z.width, z.height);
+        
+        ctx.font = "16px sans-serif";
+        ctx.fillText("🧟", z.x + 5, z.y + 25);
+
+        // Collision Check
+        if (
+          player.x < z.x + z.width &&
+          player.x + player.width > z.x &&
+          player.y < z.y + z.height &&
+          player.y + player.height > z.y
+        ) {
+          gameActive = false;
+        }
+
+        if (z.x + z.width < 0) {
+          zombies.splice(i, 1);
+        }
+      }
+
+      // Score Display
+      ctx.fillStyle = "#000";
+      ctx.font = "bold 16px Courier New";
+      ctx.fillText("DISTANCE: " + Math.floor(score / 10) + "m", canvas.width - 170, 20);
+
+      // Game Over Display
+      if (!gameActive) {
+        ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = "#ff4d4d";
+        ctx.font = "bold 28px Courier New";
+        ctx.textAlign = "center";
+        ctx.fillText("CARRIAGE OVERRUN!", canvas.width / 2, canvas.height / 2 - 10);
+        
+        ctx.fillStyle = "#fff";
+        ctx.font = "16px Courier New";
+        ctx.fillText("Distance Traveled: " + Math.floor(score / 10) + "m", canvas.width / 2, canvas.height / 2 + 25);
+        ctx.fillText("Click 'Restart Game' to play again", canvas.width / 2, canvas.height / 2 + 55);
+        ctx.textAlign = "start";
+      } else {
+        requestAnimationFrame(loop);
+      }
+    }
+
+    loop();
+  </script>
+</body>
+      </html>
+
