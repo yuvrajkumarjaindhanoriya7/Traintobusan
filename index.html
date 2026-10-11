@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>LAST TRAIN: SEOUL → BUSAN</title>
+<style>
+:root{--red:#ff3b35;--gold:#ffca62;--panel:rgba(7,10,15,.88);--line:rgba(255,255,255,.2)}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070a;color:#f5f5f5;font-family:Consolas,Monaco,monospace}canvas{display:block;image-rendering:pixelated}
+#game{position:fixed;inset:0}#hud{position:fixed;inset:0;pointer-events:none;display:none;text-shadow:2px 2px #000}
+.panel{background:var(--panel);border:1px solid var(--line);padding:10px 13px;box-shadow:0 4px 18px #0008}
+#topbar{position:absolute;left:12px;right:12px;top:12px;display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+#mission{max-width:55%;font-size:12px;line-height:1.5}#route{font-size:12px;text-align:right;color:var(--gold)}
+#stats{position:absolute;bottom:12px;left:12px;display:flex;gap:8px;flex-wrap:wrap}
+.stat{min-width:80px;font-size:11px}.stat b{display:block;font-size:18px;color:var(--gold);margin-top:3px}
+#crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:26px;color:#fff;opacity:.85}
+#weapon{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:210px;height:140px;pointer-events:none}
+#weapon:before{content:"";position:absolute;bottom:-25px;left:55px;width:100px;height:135px;background:linear-gradient(90deg,#171a20,#545b61 35%,#252a30 70%,#111);clip-path:polygon(35% 0,65% 0,78% 40%,100% 100%,0 100%,22% 40%);border:2px solid #080a0d}
+#weapon:after{content:"";position:absolute;bottom:40px;left:91px;width:28px;height:72px;background:linear-gradient(90deg,#090a0c,#45484c,#090a0c);border:2px solid #090a0c}
+#toast{position:absolute;top:24%;left:50%;transform:translateX(-50%);background:#05070be8;border:1px solid #ffffff38;padding:12px 18px;text-align:center;font-size:13px;max-width:85%;display:none}
+#prompt{position:absolute;bottom:22%;left:50%;transform:translateX(-50%);background:#000b;padding:7px 12px;font-size:12px;display:none}
+#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,#202a30dd,#030507f5);z-index:5;padding:16px}
+.card{width:min(720px,100%);max-height:95vh;overflow:auto;background:#080c11f2;border:1px solid #59636b;padding:clamp(18px,4vw,34px);box-shadow:0 0 60px #000}
+.eyebrow{color:var(--red);font-size:12px;letter-spacing:4px;font-weight:bold}
+h1{font-size:clamp(32px,7vw,64px);line-height:.9;margin:14px 0;color:#f3f3ed;letter-spacing:-2px}h1 span{color:var(--red)}
+.subtitle{color:#bbc3c9;line-height:1.6;font-size:14px;max-width:570px}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:20px 0}.feature{border:1px solid #343c43;padding:12px;background:#10161c}.feature strong{display:block;color:var(--gold);font-size:12px;margin-bottom:6px}.feature small{color:#adb6bd;line-height:1.45}
+button{font:inherit;border:1px solid #ff655d;background:#9f1f1d;color:white;padding:13px 18px;cursor:pointer;font-weight:bold;letter-spacing:1px}button:hover{background:#d32c28}button.secondary{background:#151b21;border-color:#59636b}#start{width:100%;font-size:15px;padding:16px}
+.controls{font-size:11px;color:#9ca7af;line-height:1.8;margin-top:14px}
+#endButtons{display:flex;gap:10px;margin-top:20px;flex-wrap:wrap}
+#mobile{position:fixed;inset:0;display:none;pointer-events:none;z-index:3}
+.pad{position:absolute;bottom:20px;pointer-events:auto;display:grid;gap:5px}.move{left:15px;grid-template-columns:48px 48px 48px;grid-template-rows:48px 48px}.acts{right:14px;grid-template-columns:60px 60px;grid-template-rows:52px 52px}
+.touch{border:1px solid #ffffff66;background:#0a1016b8;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;user-select:none;touch-action:none;border-radius:6px}.touch:active{background:#a92727d9}.up{grid-column:2}.left{grid-column:1;grid-row:2}.down{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}
+#aimstick{position:absolute;right:145px;bottom:28px;width:105px;height:105px;border:1px solid #ffffff40;border-radius:50%;background:#1118;pointer-events:auto;touch-action:none}
+#aimdot{position:absolute;left:39px;top:39px;width:26px;height:26px;border-radius:50%;background:#ffffff75}
+@media(max-width:600px){#mission{font-size:10px;max-width:60%}#route{font-size:10px}.stat{min-width:62px;font-size:9px}.stat b{font-size:15px}#weapon{transform:translateX(-50%) scale(.75);transform-origin:bottom center}.grid{grid-template-columns:1fr 1fr}.feature{padding:9px}}
+</style>
+</head>
+<body>
+<div id="game"></div>
+<div id="hud">
+  <div id="topbar"><div id="mission" class="panel">OBJECTIVE<br><b id="objective">Search the carriage</b></div><div id="route" class="panel">SEOUL → BUSAN<br><b id="carriage">CARRIAGE 01 / 06</b></div></div>
+  <div id="crosshair">+</div><div id="weapon"></div>
+  <div id="toast"></div><div id="prompt"></div>
+  <div id="stats">
+    <div class="panel stat">HEALTH<b id="health">100</b></div>
+    <div class="panel stat">AMMO<b id="ammo">18 / 72</b></div>
+    <div class="panel stat">ZOMBIES<b id="zcount">0</b></div>
+    <div class="panel stat">RESCUED<b id="rescued">0 / 3</b></div>
+    <div class="panel stat">WEAPON<b id="weaponname">PISTOL</b></div>
+  </div>
+</div>
+<div id="mobile">
+  <div class="pad move">
+    <div class="touch up" data-key="w">▲</div><div class="touch left" data-key="a">◀</div><div class="touch down" data-key="s">▼</div><div class="touch right" data-key="d">▶</div>
+  </div>
+  <div id="aimstick"><div id="aimdot"></div></div>
+  <div class="pad acts">
+    <div class="touch" data-action="fire">FIRE</div><div class="touch" data-action="melee">MELEE</div>
+    <div class="touch" data-action="reload">RELOAD</div><div class="touch" data-action="use">USE</div>
+    <div class="touch" data-action="switch">SWITCH</div><div class="touch" data-action="sprint">RUN</div>
+  </div>
+</div>
+<div id="overlay">
+  <div class="card" id="menuCard">
+    <div class="eyebrow">YJD PRESENTS • SURVIVAL FPS</div>
+    <h1>LAST TRAIN<br><span>SEOUL → BUSAN</span></h1>
+    <p class="subtitle">The outbreak has reached the express line. You are a businessman trapped aboard a train full of the infected. Find your daughter, rescue two other survivors, and make it to Busan before the journey ends.</p>
+    <div class="grid">
+      <div class="feature"><strong>▰ SIX CARRIAGES</strong><small>Explore passenger cars, dining car, service car and the final control carriage.</small></div>
+      <div class="feature"><strong>✚ SURVIVORS</strong><small>Rescue your daughter, a pregnant passenger and a baseball player who can help.</small></div>
+      <div class="feature"><strong>⚔ COMBAT</strong><small>Fire your pistol, reload, switch to a powerful melee strike and manage ammo.</small></div>
+      <div class="feature"><strong>▣ SURVIVAL</strong><small>Health, pickups, keys, locked doors, escalating zombie encounters and a Busan finale.</small></div>
+    </div>
+    <button id="start">BOARD THE TRAIN</button>
+    <div class="controls"><b>PC:</b> WASD move · Mouse look · Left-click fire · F melee · R reload · E interact · Q switch weapon · Shift sprint · Esc pause<br><b>Mobile:</b> Left pad move · Drag right-side aim circle to look · FIRE / MELEE / USE buttons<br><br>Retro low-poly visuals. Best played in fullscreen. Click the game once to capture mouse.</div>
+  </div>
+</div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
+
+const $=id=>document.getElementById(id);
+const game=$('game');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0x101820); scene.fog=new THREE.Fog(0x101820,14,52);
+const camera=new THREE.PerspectiveCamera(76,innerWidth/innerHeight,.1,100);
+camera.position.set(0,1.65,4); camera.rotation.order='YXZ';
+const renderer=new THREE.WebGLRenderer({antialias:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.25)); renderer.setSize(innerWidth,innerHeight); renderer.shadowMap.enabled=false; renderer.outputColorSpace=THREE.SRGBColorSpace;
+game.appendChild(renderer.domElement);
+scene.add(new THREE.HemisphereLight(0x9ab5c8,0x29201b,1.4));
+const light=new THREE.DirectionalLight(0xffd4a0,1.0); light.position.set(0,8,4); scene.add(light);
+const mat=(color,rough=.9,emissive=0x000000)=>new THREE.MeshStandardMaterial({color,roughness:rough,emissive});
+const mats={
+ floor:mat(0x343b3e),wall:mat(0x667078),dark:mat(0x171c21),trim:mat(0xb0a58c),seat:mat(0x5b2925),glass:mat(0x263d4a,.3),metal:mat(0x343c43),yellow:mat(0xd4a542),red:mat(0x9e2927),green:mat(0x355e4a),white:mat(0xd0d0c4),zombie:mat(0x677a60),skin:mat(0x8f9a80),blood:mat(0x631c1b),blue:mat(0x243d5e),black:mat(0x111315)
+};
+const boxGeo=new THREE.BoxGeometry(1,1,1);
+function box(parent,material,x,y,z,sx,sy,sz){let m=new THREE.Mesh(boxGeo,material);m.position.set(x,y,z);m.scale.set(sx,sy,sz);m.castShadow=false;m.receiveShadow=false;parent.add(m);return m;}
+const train=new THREE.Group();scene.add(train);
+const carLen=12, carW=5.5, carH=3.5, carCount=6, fullLen=carLen*carCount;
+function buildCar(i){
+ let g=new THREE.Group();g.position.z=-i*carLen;train.add(g);
+ box(g,mats.floor,0,0,0,carW,.18,carLen);
+ box(g,mats.dark,0,carH,-carLen/2,carW,carH,.22);
+ box(g,mats.wall,-carW/2,carH/2,0,.18,carH,carLen);
+ box(g,mats.wall,carW/2,carH/2,0,.18,carH,carLen);
+ box(g,mats.dark,0,carH,0,carW,.18,carLen);
+ box(g,mats.trim,-carW/2+.14,.24,0,.08,.12,carLen);
+ box(g,mats.trim,carW/2-.14,.24,0,.08,.12,carLen);
+ // window bays and outdoor streaks
+ for(let side of [-1,1]){
+   for(let j=0;j<4;j++){
+    let z=-carLen+1.7+j*2.65;
+    box(g,mats.glass,side*(carW/2-.105),2.35,z,.035,.82,1.65);
+    box(g,mats.trim,side*(carW/2-.12),2.35,z,.06,.95,1.78);
+    // reinsert glass on top of frame
+    box(g,mats.glass,side*(carW/2-.15),2.35,z,.025,.78,1.56);
+   }
+ }
+ // ceiling lamps
+ for(let j=0;j<3;j++){let z=-1.5-j*3.3;box(g,mats.yellow,0,carH-.13,z,.65,.05,.42);let pl=new THREE.PointLight(0xffd7a0,.6,7);pl.position.set(0,3.1,z);g.add(pl);}
+ // seats, aisle remains clear
+ for(let row=0;row<4;row++){
+  let z=-1.2-row*2.55;
+  for(let side of [-1,1]){
+   box(g,mats.seat,side*1.55,.55,z,.95,.8,1.0);
+   box(g,mats.seat,side*1.55,.98,z+.34,.95,.55,.18);
+   box(g,mats.metal,side*1.55,.12,z,.9,.16,.9);
+  }
+ }
+ // connecting doors
+ box(g,mats.metal,0,1.35,-carLen+.15,1.5,2.55,.16);
+ box(g,mats.dark,0,1.35,-carLen+.04,1.05,2.25,.06);
+ box(g,mats.yellow,0,2.65,-carLen+.02,.9,.08,.08);
+ // carriage label sign
+ box(g,mats.blue,0,2.95,-2.0,1.6,.32,.06);
+ // overhead luggage rails
+ box(g,mats.metal,0,2.72,0,4.2,.08,.12);
+ // carriage specific props
+ if(i===1){box(g,mats.metal,0,.6,-5.5,1.0,1.2,.8);box(g,mats.red,0,1.25,-5.5,.8,.12,.65);}
+ if(i===2){for(let j=0;j<3;j++)box(g,mats.green,0,.5,-2-j*2.5,1.2,.75,.7);}
+ if(i===3){box(g,mats.dark,0,1.3,-5.8,2.5,2.5,.2);box(g,mats.yellow,0,2.7,-5.65,2.3,.12,.12);}
+ if(i===5){box(g,mats.dark,0,1.6,-10.5,2.5,3,.35);box(g,mats.green,0,1.7,-10.25,1.7,1.4,.1);}
+ return g;
+}
+const cars=[];for(let i=0;i<carCount;i++)cars.push(buildCar(i));
+// Add tunnel scenery seen through windows
+const outside=new THREE.Group();scene.add(outside);
+for(let i=0;i<36;i++){
+ let z=5-i*7;
+ box(outside,mat(i%2?0x182229:0x242b2e),0,-.5,z,45,.5,7);
+ for(let side of [-1,1])box(outside,mat(0x182024),side*7,2,z, .5,5,7);
+}
+const player={x:0,y:1.65,z:3.7,yaw:0,pitch:0,health:100,ammo:18,reserve:72,weapon:0,alive:true,car:0};
+const keys={};let running=false,locked=false,paused=false,gameOver=false,won=false,fireCooldown=0,meleeCooldown=0,reloadTimer=0,damageFlash=0,toastTimer=0,objectiveIndex=0;
+let zombies=[],pickups=[],interactables=[],rescued={daughter:false,pregnant:false,baseball:false},rescueCount=0,doorOpen={},stage=0,elapsed=0;
+const weaponNames=['PISTOL','SERVICE BAT'];$('weaponname').textContent=weaponNames[0];
+function makeZombie(x,z,type='walker'){
+ const g=new THREE.Group();g.position.set(x,0,z);scene.add(g);
+ const shirt=type==='runner'?mats.red:mats.zombie;
+ box(g,shirt,0,1.15,0,.55,.8,.34);
+ box(g,mats.skin,0,1.82,-.015,.42,.43,.4);
+ box(g,mats.dark,0,2.02,.01,.43,.14,.42);
+ box(g,mats.dark,-.12,1.84,-.22,.07,.06,.04);box(g,mats.dark,.12,1.84,-.22,.07,.06,.04);
+ for(let s of [-1,1]){
+  box(g,shirt,s*.36,1.18,0,.18,.65,.2);
+  box(g,mats.skin,s*.36,.78,-.04,.16,.25,.18);
+  box(g,mats.dark,s*.16,.36,0,.2,.65,.22);
+ }
+ const zmb={g,x,z,hp:type==='brute'?120: type==='runner'?45:60,speed:type==='runner'?1.5:type==='brute'?.45:.72,attack:0,type,dead:false};zombies.push(zmb);return zmb;
+}
+function spawnCarZombies(i,count){
+ for(let n=0;n<count;n++){
+  let z=-i*carLen-1.4-Math.random()*(carLen-2.5);
+  let x=(Math.random()-.5)*2.7;
+  makeZombie(x,z,Math.random()<.24?'runner':'walker');
+ }
+}
+function pickup(x,z,type){let g=new THREE.Group();g.position.set(x,.45,z);scene.add(g);
+ let color=type==='med'?0x3bcb83:type==='ammo'?0xe6c354:type==='key'?0x4bb6e8:0xffc66d;
+ let m=new THREE.Mesh(new THREE.BoxGeometry(.38,.38,.38),new THREE.MeshStandardMaterial({color,emissive:color,emissiveIntensity:.28}));g.add(m);
+ let p={g,x,z,type,taken:false};pickups.push(p);return p;}
+function survivor(x,z,id,label){
+ const g=new THREE.Group();g.position.set(x,0,z);scene.add(g);
+ box(g,id==='daughter'?mats.blue:id==='pregnant'?mats.green:mats.white,0,1.05,0,.5,.85,.35);
+ box(g,mats.skin,0,1.7,0,.4,.4,.4);
+ if(id==='baseball'){box(g,mats.white,0,2.0,0,.42,.15,.42);box(g,mats.dark,0,.85,.24,.55,.35,.15);}
+ const o={g,x,z,id,label,done:false};interactables.push(o);return o;}
+spawnCarZombies(0,5);spawnCarZombies(1,4);spawnCarZombies(2,5);spawnCarZombies(3,6);spawnCarZombies(4,7);spawnCarZombies(5,8);
+survivor(-1.55,-carLen-7.7,'daughter','DAUGHTER');
+survivor(1.55,-carLen*2-7.4,'pregnant','PREGNANT WOMAN');
+survivor(-1.5,-carLen*3-7.5,'baseball','BASEBALL PLAYER');
+pickup(1.55,-4,'ammo');pickup(-1.55,-carLen-4,'med');pickup(1.5,-carLen*2-3,'ammo');pickup(-1.5,-carLen*3-3,'med');pickup(1.55,-carLen*4-4,'ammo');pickup(0,-carLen*4-8,'key');
+const objectives=[
+'Fight through Carriage 1 and reach the connecting door.',
+'Find your daughter in Carriage 2. Press E / USE near her.',
+'Rescue the pregnant woman in Carriage 3.',
+'Find the baseball player in Carriage 4.',
+'Push through the service car. Find supplies and survive.',
+'Reach the final control carriage and clear the infected.',
+'Busan is ahead. Reach the exit door to finish the journey.'
+];
+function showToast(s,ms=2400){$('toast').textContent=s;$('toast').style.display='block';toastTimer=ms/1000;}
+function updateHUD(){
+ $('health').textContent=Math.max(0,Math.ceil(player.health));$('ammo').textContent=player.weapon===0?`${player.ammo} / ${player.reserve}`:'∞';
+ $('zcount').textContent=zombies.filter(z=>!z.dead).length;$('rescued').textContent=`${rescueCount} / 3`;
+ $('carriage').textContent=`CARRIAGE ${String(Math.min(6,Math.floor(Math.max(0,-player.z)/carLen)+1)).padStart(2,'0')} / 06`;
+ $('objective').textContent=objectives[Math.min(objectiveIndex,objectives.length-1)];
+}
+function currentCar(){return Math.max(0,Math.min(5,Math.floor(Math.max(0,-player.z)/carLen)));}
+function moveToCar(i){player.z=-i*carLen-2.0;player.x=0;player.car=i;camera.position.set(player.x,player.y,player.z);objectiveIndex=Math.max(objectiveIndex,i===0?0:i);showToast(`CARRIAGE ${i+1} — STAY ALERT`,2000);}
+function findDoor(){let car=currentCar();let nextZ=-(car+1)*carLen+.8;if(player.z<nextZ+1.3&&player.z>nextZ-1.3&&Math.abs(player.x)<1.2)return car;}
+function tryUse(){
+ if(!running||paused)return;
+ // Survivor interactions
+ for(const o of interactables){if(o.done)continue;let d=Math.hypot(player.x-o.x,player.z-o.z);if(d<1.65){
+   o.done=true;rescueCount++;rescued[o.id]=true;o.g.visible=false;
+   if(o.id==='daughter'){showToast('DAUGHTER RESCUED — “Dad, I knew you would come!”');objectiveIndex=2;}
+   else if(o.id==='pregnant'){showToast('PREGNANT WOMAN RESCUED — She joins your group.');objectiveIndex=3;}
+   else{showToast('BASEBALL PLAYER RESCUED — He will help hold the line.');objectiveIndex=4;}
+   updateHUD();return;
+ }}
+ for(const p of pickups){if(p.taken)continue;if(Math.hypot(player.x-p.x,player.z-p.z)<1.35){
+  p.taken=true;p.g.visible=false;
+  if(p.type==='med'){player.health=Math.min(100,player.health+35);showToast('MEDKIT COLLECTED  +35 HEALTH');}
+  if(p.type==='ammo'){player.reserve+=24;showToast('AMMUNITION COLLECTED  +24');}
+  if(p.type==='key'){doorOpen[4]=true;showToast('SERVICE KEY FOUND — FINAL CARRIAGE ACCESS UNLOCKED');}
+  updateHUD();return;
+ }}
+ let car=currentCar(),localZ=player.z+car*carLen;
+ if(localZ<-10.2&&car<5){
+   if(car===4&&!doorOpen[4]&&rescueCount<3){showToast('LOCKED BULKHEAD — rescue all three survivors first');return;}
+   if(car===4&&!doorOpen[4]){showToast('LOCKED BULKHEAD — find the service key');return;}
+   moveToCar(car+1);objectiveIndex=Math.max(objectiveIndex,car+1);updateHUD();return;
+ }
+ if(car===5&&localZ<-10.2){if(zombies.filter(z=>!z.dead).length===0){finishGame(true);}else showToast('CLEAR THE FINAL CARRIAGE BEFORE EXITING');return;}
+ showToast('Nothing to use here. Search the carriage.');
+}
+function reload(){
+ if(!running||paused||player.weapon!==0||reloadTimer>0)return;
+ if(player.ammo>=18||player.reserve<=0){showToast('NO RELOAD NEEDED');return;}
+ reloadTimer=1.1;showToast('RELOADING...');
+}
+function switchWeapon(){player.weapon=1-player.weapon;$('weaponname').textContent=weaponNames[player.weapon];$('weapon').style.opacity=player.weapon===0?'1':'.35';showToast(weaponNames[player.weapon]);}
+function getForward(){return new THREE.Vector3(-Math.sin(player.yaw),0,-Math.cos(player.yaw));}
+function getRight(){return new THREE.Vector3(Math.cos(player.yaw),0,-Math.sin(player.yaw));}
+function fire(){
+ if(!running||paused||gameOver||player.weapon!==0||fireCooldown>0||reloadTimer>0)return;
+ if(player.ammo<=0){showToast('CLICK — EMPTY. PRESS R TO RELOAD',800);fireCooldown=.25;return;}
+ player.ammo--;fireCooldown=.22;
+ const dir=new THREE.Vector3(-Math.sin(player.yaw)*Math.cos(player.pitch),Math.sin(player.pitch),-Math.cos(player.yaw)*Math.cos(player.pitch));
+ const ray=new THREE.Raycaster(camera.position,dir,0,20);
+ const targets=[];
+ for(const z of zombies)if(!z.dead){z.g.traverse(o=>{if(o.isMesh)targets.push({obj:o,zombie:z});});}
+ const hits=ray.intersectObjects(targets.map(t=>t.obj),false);
+ if(hits.length){let hit=targets.find(t=>t.obj===hits[0].object);if(hit){hit.zombie.hp-=34;hit.zombie.g.position.x+=dir.x*.13;if(hit.zombie.hp<=0)killZombie(hit.zombie);}}
+ $('crosshair').style.color='#ff554f';setTimeout(()=>$('crosshair').style.color='#fff',70);updateHUD();
+}
+function melee(){
+ if(!running||paused||meleeCooldown>0)return;meleeCooldown=.65;
+ const f=getForward();let target=null,best=2.2;
+ for(const z of zombies){if(z.dead)continue;const dx=z.x-player.x,dz=z.z-player.z,d=Math.hypot(dx,dz),dot=(dx*f.x+dz*f.z)/(d||1);if(d<best&&dot>.15){best=d;target=z;}}
+ if(target){target.hp-=player.weapon===1?75:30;if(target.hp<=0)killZombie(target);else showToast('HIT — KEEP MOVING',500);}
+ else showToast('MELEE MISS',450);
+}
+function killZombie(z){z.dead=true;z.g.visible=false;if(Math.random()<.26)pickup(z.x,z.z,Math.random()<.5?'ammo':'med');updateHUD();}
+function finishGame(win){
+ running=false;gameOver=true;won=win;document.exitPointerLock?.();$('overlay').style.display='flex';
+ $('menuCard').innerHTML=win?`<div class="eyebrow">CAMPAIGN COMPLETE</div><h1>BUSAN<br><span>REACHED.</span></h1><p class="subtitle">You made it. The survivors are alive, the train has reached Busan, and your journey through the infected carriages is over. You survived with ${Math.ceil(player.health)} health remaining.</p><div class="grid"><div class="feature"><strong>SURVIVORS</strong><small>${rescueCount} of 3 rescued</small></div><div class="feature"><strong>INFECTED REMAINING</strong><small>${zombies.filter(z=>!z.dead).length}</small></div></div><button id="restart">PLAY AGAIN</button>`:
+ `<div class="eyebrow">SIGNAL LOST</div><h1>THE TRAIN<br><span>HAS FALLEN.</span></h1><p class="subtitle">You were overwhelmed before reaching Busan. The survivors still need someone to get them through.</p><button id="restart">TRY AGAIN</button>`;
+ $('restart').onclick=()=>location.reload();
+}
+function pauseGame(){if(!running||gameOver)return;paused=!paused;$('overlay').style.display=paused?'flex':'none';if(paused){$('menuCard').innerHTML=`<div class="eyebrow">PAUSED</div><h1>HOLD<br><span>POSITION.</span></h1><p class="subtitle">Your train is still crawling toward Busan. Take a breath, then continue.</p><button id="resume">CONTINUE</button> <button class="secondary" id="restart">RESTART</button><div class="controls">WASD move · Mouse look · Left-click fire · F melee · R reload · E use · Q switch · Shift sprint</div>`;$('resume').onclick=()=>{paused=false;$('overlay').style.display='none';};$('restart').onclick=()=>location.reload();}else $('overlay').style.display='none';}
+function startGame(){
+ $('overlay').style.display='none';$('hud').style.display='block';running=true;player.health=100;camera.position.set(player.x,player.y,player.z);
+ if(innerWidth>700)renderer.domElement.requestPointerLock?.();
+}
+$('start').onclick=startGame;
+renderer.domElement.addEventListener('click',()=>{if(running&&!paused&&innerWidth>700&&document.pointerLockElement!==renderer.domElement)renderer.domElement.requestPointerLock?.();});
+document.addEventListener('pointerlockchange',()=>locked=document.pointerLockElement===renderer.domElement);
+document.addEventListener('mousemove',e=>{if(locked&&running&&!paused){player.yaw-=e.movementX*.0022;player.pitch-=e.movementY*.0022;player.pitch=Math.max(-1.2,Math.min(1.2,player.pitch));camera.rotation.set(player.pitch,player.yaw,0,'YXZ');}});
+document.addEventListener('keydown',e=>{
+ keys[e.key.toLowerCase()]=true;
+ if([' ','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key))e.preventDefault();
+ if(e.repeat)return;
+ if(e.key.toLowerCase()==='f')melee();if(e.key.toLowerCase()==='r')reload();if(e.key.toLowerCase()==='e')tryUse();if(e.key.toLowerCase()==='q')switchWeapon();
+ if(e.key==='Escape'&&running)pauseGame();
+});
+document.addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+document.addEventListener('mousedown',e=>{if(e.button===0){if(running&&!paused)fire();}});
+document.addEventListener('contextmenu',e=>e.preventDefault());
+// mobile touch controls
+if('ontouchstart'in window||navigator.maxTouchPoints>0)$('mobile').style.display='block';
+document.querySelectorAll('[data-key]').forEach(el=>{
+ const k=el.dataset.key;el.addEventListener('pointerdown',e=>{e.preventDefault();keys[k]=true;el.setPointerCapture?.(e.pointerId);});
+ ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>el.addEventListener(ev,()=>keys[k]=false));
+});
+document.querySelectorAll('[data-action]').forEach(el=>{
+ const act=el.dataset.action;el.addEventListener('pointerdown',e=>{e.preventDefault();if(act==='fire')fire();if(act==='melee')melee();if(act==='reload')reload();if(act==='use')tryUse();if(act==='switch')switchWeapon();if(act==='sprint')keys.shift=true;});
+ ['pointerup','pointercancel','lostpointercapture'].forEach(ev=>el.addEventListener(ev,()=>{if(act==='sprint')keys.shift=false;}));
+});
+let aim=$('aimstick'),aimActive=false,aimLast=null;
+aim.addEventListener('pointerdown',e=>{aimActive=true;aimLast={x:e.clientX,y:e.clientY};aim.setPointerCapture(e.pointerId);});
+aim.addEventListener('pointermove',e=>{if(!aimActive||!aimLast)return;let dx=e.clientX-aimLast.x,dy=e.clientY-aimLast.y;player.yaw-=dx*.008;player.pitch=Math.max(-1.15,Math.min(1.15,player.pitch-dy*.008));camera.rotation.set(player.pitch,player.yaw,0,'YXZ');aimLast={x:e.clientX,y:e.clientY};$('aimdot').style.transform=`translate(${Math.max(-35,Math.min(35,dx))}px,${Math.max(-35,Math.min(35,dy))}px)`;});
+['pointerup','pointercancel','lostpointercapture'].forEach(ev=>aim.addEventListener(ev,()=>{aimActive=false;aimLast=null;$('aimdot').style.transform='';}));
+
+function updatePlayer(dt){
+ if(!running||paused||gameOver)return;
+ let f=0,s=0;if(keys.w||keys.arrowup)f++;if(keys.s||keys.arrowdown)f--;if(keys.d||keys.arrowright)s++;if(keys.a||keys.arrowleft)s--;
+ let speed=keys.shift?5.1:3.2;
+ let dx=(-Math.sin(player.yaw)*f+Math.cos(player.yaw)*s)*speed*dt;
+ let dz=(-Math.cos(player.yaw)*f-Math.sin(player.yaw)*s)*speed*dt;
+ // keep player inside current connected train; doors allow progression only with interaction
+ let car=currentCar(),minZ=-(car+1)*carLen+0.2,maxZ=-car*carLen+5.3;
+ let nx=player.x+dx,nz=player.z+dz;
+ player.x=Math.max(-2.15,Math.min(2.15,nx));
+ player.z=Math.max(minZ,Math.min(maxZ,nz));
+ // connecting door thresholds
+ camera.position.set(player.x,player.y,player.z);camera.rotation.set(player.pitch,player.yaw,0,'YXZ');
+}
+function updateZombies(dt){
+ if(!running||paused||gameOver)return;
+ for(const z of zombies){if(z.dead)continue;
+  const dx=player.x-z.x,dz=player.z-z.z,d=Math.hypot(dx,dz);
+  if(d<10&&d>.72){
+   z.x+=dx/d*z.speed*dt;z.z+=dz/d*z.speed*dt;z.g.position.x=z.x;z.g.position.z=z.z;
+   z.g.rotation.y=Math.atan2(dx,dz);
+  }else if(d<=.95){z.attack+=dt;if(z.attack>1.0){player.health-=z.type==='brute'?16:8;z.attack=0;damageFlash=.2;if(player.health<=0){player.health=0;finishGame(false);}}}
+ }
+}
+function updateWorld(dt){
+ elapsed+=dt;fireCooldown=Math.max(0,fireCooldown-dt);meleeCooldown=Math.max(0,meleeCooldown-dt);damageFlash=Math.max(0,damageFlash-dt);
+ if(reloadTimer>0){reloadTimer-=dt;if(reloadTimer<=0){let n=Math.min(18-player.ammo,player.reserve);player.ammo+=n;player.reserve-=n;showToast('RELOADED',600);}}
+ if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)$('toast').style.display='none';}
+ // mild train vibration and scenery scrolling to imply movement
+ train.position.x=Math.sin(elapsed*7)*.015;train.position.y=Math.sin(elapsed*13)*.009;
+ outside.children.forEach((o,i)=>{o.position.z+=dt*1.8;if(o.position.z>10)o.position.z=-240;});
+ // Survivor companions are hidden behind player so not in the way; rescue status persists
+ updatePlayer(dt);updateZombies(dt);
+ const car=currentCar();if(car>=1&&objectiveIndex<1)objectiveIndex=1;
+ if(car===5&&objectiveIndex<5)objectiveIndex=5;
+ // prompt nearest usable object
+ let msg='';
+ for(const o of interactables){if(!o.done&&Math.hypot(player.x-o.x,player.z-o.z)<2.2){msg=`[E / USE] RESCUE ${o.label}`;break;}}
+ if(!msg)for(const p of pickups){if(!p.taken&&Math.hypot(player.x-p.x,player.z-p.z)<1.8){msg=`[E / USE] COLLECT ${p.type.toUpperCase()}`;break;}}
+ if(!msg){let carIdx=currentCar(),local=player.z+carIdx*carLen;if(local<-9.6&&carIdx<5)msg='[E / USE] OPEN CONNECTING DOOR';if(carIdx===5&&local<-9.6)msg='[E / USE] EXIT TO BUSAN';}
+ $('prompt').textContent=msg;$('prompt').style.display=msg?'block':'none';
+ updateHUD();
+ if(damageFlash>0){renderer.setClearColor(0x551111); }else renderer.setClearColor(0x101820);
+}
+let last=performance.now();
+function animate(now){requestAnimationFrame(animate);let dt=Math.min(.04,(now-last)/1000);last=now;updateWorld(dt);renderer.render(scene,camera);}
+requestAnimationFrame(animate);
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));});
+updateHUD();
+</script>
+</body>
+</html>
